@@ -5,7 +5,8 @@ import type { Story } from "./types.js";
 export const PROFILE_DIR = ".playwright-profile";
 
 export async function openLoginBrowser(): Promise<void> {
-  const context = await chromium.launchPersistentContext(PROFILE_DIR, {
+  const profileDir = profileDirFromEnv();
+  const context = await chromium.launchPersistentContext(profileDir, {
     headless: false,
   });
   const page = context.pages()[0] ?? (await context.newPage());
@@ -13,11 +14,11 @@ export async function openLoginBrowser(): Promise<void> {
   console.log("Browser opened. Complete Pirate Wires login, then press Enter here.");
   await waitForEnter();
   await context.close();
-  console.log("Login session saved in .playwright-profile.");
+  console.log(`Login session saved in ${profileDir}.`);
 }
 
 export async function extractStoryFromUrl(url: string): Promise<Story> {
-  const context = await chromium.launchPersistentContext(PROFILE_DIR, {
+  const context = await chromium.launchPersistentContext(profileDirFromEnv(), {
     headless: process.env.PWR_HEADLESS === "true",
   });
   const page = context.pages()[0] ?? (await context.newPage());
@@ -38,6 +39,12 @@ export function canonicalPirateWiresUrl(url: string): string {
     parsed.hostname = "www.piratewires.com";
   }
   return parsed.toString();
+}
+
+export function profileDirFromEnv(
+  env: Partial<Pick<NodeJS.ProcessEnv, "PWR_PROFILE_DIR">> = process.env,
+): string {
+  return env.PWR_PROFILE_DIR || PROFILE_DIR;
 }
 
 async function waitForEnter(): Promise<void> {

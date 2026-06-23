@@ -15,6 +15,8 @@ Do not commit real values for:
 
 Cached article images and alignment JSON are generated runtime artifacts and
 belong under the ignored library/output directory, not in git.
+When `PWR_PROFILE_DIR` points into `/data`, that profile directory contains
+logged-in browser session material and must stay in the ignored runtime volume.
 
 ## Network Exposure
 

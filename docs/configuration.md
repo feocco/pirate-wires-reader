@@ -15,6 +15,7 @@ The app reads configuration from environment variables.
 | `PIRATE_RADIO_MAX_NOTIFICATIONS_PER_POLL` | `1` | Notification cap per poll. |
 | `PIRATE_RADIO_ENABLE_ALIGNMENT` | `false` | Set to `true` to run the optional post-TTS Whisper word-timestamp prototype. |
 | `PWR_HEADLESS` | unset | Set to `true` for Docker/headless Playwright. |
+| `PWR_PROFILE_DIR` | `.playwright-profile` | Playwright browser profile path. Use a durable mounted path in Docker. |
 | `OPENAI_API_KEY` | none | Required for approved TTS generation. |
 | `HA_URL` | none | Home Assistant base URL. |
 | `HA_LONG_LIVED_TOKEN` | none | Home Assistant WebSocket token. |
