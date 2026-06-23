@@ -13,7 +13,9 @@ describe("reader page", () => {
     expect(html).toContain("pirate-radio-position:");
     expect(html).toContain("item.imageUrl");
     expect(html).toContain('"/article/" + encodeURIComponent(item.slug)');
+    expect(html).toContain("downloadLink.download = item.slug + \".mp3\"");
     expect(html).toContain("Read");
+    expect(html).toContain("Download MP3");
     expect(html).toContain("Pirate Wires");
   });
 
@@ -63,6 +65,8 @@ describe("reader page", () => {
     expect(html).toContain("A sharp test tagline.");
     expect(html).toContain("/images/test-story.png");
     expect(html).toContain("/audio/test-story.mp3");
+    expect(html).toContain('download="test-story.mp3"');
+    expect(html).toContain("Download MP3");
     expect(html).toContain("/alignment/test-story.json");
     expect(html).toContain("data-word-index");
     expect(html).toContain("A Section");

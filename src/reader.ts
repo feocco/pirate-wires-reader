@@ -129,6 +129,11 @@ export function renderReaderHtml(): string {
         readLink.className = "readlink";
         readLink.href = "/article/" + encodeURIComponent(item.slug);
         readLink.textContent = "Read";
+        const downloadLink = document.createElement("a");
+        downloadLink.className = "readlink";
+        downloadLink.href = item.audioUrl;
+        downloadLink.download = item.slug + ".mp3";
+        downloadLink.textContent = "Download MP3";
         const audio = document.createElement("audio");
         audio.controls = true;
         audio.preload = "metadata";
@@ -140,7 +145,7 @@ export function renderReaderHtml(): string {
         audio.addEventListener("timeupdate", () => {
           localStorage.setItem(keyFor(item.slug), String(audio.currentTime));
         });
-        actions.append(readLink);
+        actions.append(readLink, downloadLink);
         content.append(heading, meta);
         if (item.tagline) content.append(tagline);
         content.append(actions, audio);
@@ -184,6 +189,7 @@ export function renderArticleHtml(story: Story, item: LibraryItem): string {
     ${story.heroImageUrl || item.imageUrl ? `<img class="hero-image" src="${escapeAttribute(story.heroImageUrl ?? item.imageUrl ?? "")}" alt="">` : ""}
     <section class="player-panel">
       <a class="readlink" href="/">Library</a>
+      <a class="readlink" href="${escapeAttribute(item.audioUrl)}" download="${escapeAttribute(item.slug)}.mp3">Download MP3</a>
       <audio id="article-audio" controls preload="metadata" src="${escapeAttribute(item.audioUrl)}"></audio>
     </section>
     <section class="body" id="story-body">
