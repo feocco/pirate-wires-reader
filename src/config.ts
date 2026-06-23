@@ -17,7 +17,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): PirateRadio
   const libraryDir = env.PIRATE_RADIO_LIBRARY_DIR ?? "output/library";
   return {
     port: Number(env.SERVICE_PORT ?? env.PORT ?? 8123),
-    host: env.HOST_BIND_ADDR ?? "127.0.0.1",
+    host: env.SERVICE_HOST ?? env.HOST_BIND_ADDR ?? "127.0.0.1",
     publicBaseUrl: env.PIRATE_RADIO_PUBLIC_URL ?? `http://127.0.0.1:${env.SERVICE_PORT ?? 8123}`,
     libraryDir,
     statePath: env.PIRATE_RADIO_STATE_PATH ?? `${libraryDir}/state.json`,

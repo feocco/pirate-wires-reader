@@ -5,6 +5,7 @@ The app reads configuration from environment variables.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `SERVICE_PORT` | `8123` | HTTP service port. |
+| `SERVICE_HOST` | falls back to `HOST_BIND_ADDR` | In-container/app bind address. Use `0.0.0.0` in Docker. |
 | `HOST_BIND_ADDR` | `127.0.0.1` | HTTP bind address. |
 | `PIRATE_RADIO_PUBLIC_URL` | local service URL | URL placed in notifications. |
 | `PIRATE_RADIO_LIBRARY_DIR` | `output/library` | Durable text, JSON, audio, and manifest root. |
