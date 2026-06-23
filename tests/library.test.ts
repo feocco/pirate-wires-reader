@@ -27,6 +27,10 @@ describe("library manifest", () => {
       audioPath,
       jsonPath: join(tempDir, "stories", "inside-microns-attempts.json"),
       textPath: join(tempDir, "text", "inside-microns-attempts.txt"),
+      imagePath: join(tempDir, "images", "inside-microns-attempts.png"),
+      imageUrl: "/images/inside-microns-attempts.png",
+      tagline: "following nonsense regulations",
+      sectionTitles: ["American Industrialization Redux"],
       publishedAt: "Mon, 22 Jun 2026 17:07:10 GMT",
       generatedAt: "2026-06-23T01:00:00.000Z",
       estimatedCostUsd: 0.08,
@@ -39,6 +43,9 @@ describe("library manifest", () => {
 
     expect(manifest.items).toHaveLength(1);
     expect(manifest.items[0].audioUrl).toBe("/audio/inside-microns-attempts.mp3");
+    expect(manifest.items[0].imageUrl).toBe("/images/inside-microns-attempts.png");
+    expect(manifest.items[0].tagline).toBe("following nonsense regulations");
+    expect(manifest.items[0].sectionTitles).toEqual(["American Industrialization Redux"]);
     expect(rawManifest.length).toBeLessThan(2000);
     expect(rawManifest).not.toContain(Buffer.alloc(16, 1).toString("base64"));
   });

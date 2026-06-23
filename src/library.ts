@@ -11,6 +11,13 @@ export interface LibraryItem {
   audioUrl: string;
   jsonPath: string;
   textPath: string;
+  imagePath?: string;
+  imageUrl?: string;
+  alignmentPath?: string;
+  alignmentUrl?: string;
+  hasAlignment?: boolean;
+  tagline?: string;
+  sectionTitles?: string[];
   estimatedCostUsd: number;
   wordCount: number;
   characterCount: number;

@@ -27,7 +27,7 @@ program
 program
   .command("extract")
   .argument("<url>", "Pirate Wires story URL")
-  .description("Extract story title/body and write txt/json outputs.")
+  .description("Extract story text, reader metadata, and write txt/json outputs.")
   .action(async (url: string) => {
     const story = await extractStoryFromUrl(url);
     const written = await writeStoryOutputs(story);

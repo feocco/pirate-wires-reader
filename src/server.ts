@@ -1,7 +1,8 @@
 import { createReadStream } from "node:fs";
-import { access, mkdir, stat } from "node:fs/promises";
+import { access, mkdir, readFile, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { basename, join, resolve } from "node:path";
+import { contentTypeForAsset } from "./assets.js";
 import { fetchPirateFeed, detectNewArticles } from "./feed.js";
 import { extractStoryFromUrl } from "./browser.js";
 import type { PirateRadioConfig } from "./config.js";
@@ -9,10 +10,10 @@ import { HomeAssistantActionListener } from "./haActions.js";
 import { readLibraryManifest } from "./library.js";
 import { buildArticleNotification, type PirateRadioDecision } from "./notifications.js";
 import { HomelabFunctionsNotifier, type Notifier } from "./notifier.js";
-import { renderReaderHtml } from "./reader.js";
+import { renderArticleHtml, renderReaderHtml } from "./reader.js";
 import { readState, seenArticleIds, writeState, type PirateRadioState } from "./state.js";
 import { createTtsProvider } from "./tts/index.js";
-import { handleArticleDecision, providerSynthesizer } from "./workflow.js";
+import { handleArticleDecision, providerSynthesizer, refreshLibraryArticle } from "./workflow.js";
 
 export interface PirateRadioServiceOptions {
   config: PirateRadioConfig;
@@ -91,6 +92,7 @@ export class PirateRadioService {
       libraryDir: this.options.config.libraryDir,
       readArticle: (url) => extractStoryFromUrl(url),
       synthesize: providerSynthesizer(provider),
+      enableAlignment: this.options.config.enableAlignment,
     });
     await writeState(this.options.config.statePath, state);
     console.log(`[pirate-radio] decision ${decision} for ${slug}: ${result.status}`);
@@ -111,8 +113,32 @@ export class PirateRadioService {
       html(response, renderReaderHtml());
       return;
     }
+    if (request.method === "GET" && url.pathname.startsWith("/article/")) {
+      await renderArticle(response, this.options.config.libraryDir, decodeURIComponent(url.pathname));
+      return;
+    }
     if (request.method === "GET" && url.pathname === "/library.json") {
       json(response, 200, await readLibraryManifest(this.options.config.libraryDir));
+      return;
+    }
+    if (request.method === "GET" && url.pathname.startsWith("/images/")) {
+      await streamLibraryAsset(
+        response,
+        this.options.config.libraryDir,
+        "images",
+        decodeURIComponent(url.pathname),
+        contentTypeForAsset(basename(url.pathname)),
+      );
+      return;
+    }
+    if (request.method === "GET" && url.pathname.startsWith("/alignment/")) {
+      await streamLibraryAsset(
+        response,
+        this.options.config.libraryDir,
+        "alignment",
+        decodeURIComponent(url.pathname),
+        "application/json",
+      );
       return;
     }
     if (
@@ -130,6 +156,15 @@ export class PirateRadioService {
     }
     if (request.method === "POST" && url.pathname.startsWith("/simulate/")) {
       const [, , decision, slug] = url.pathname.split("/");
+      if (decision === "refresh" && slug) {
+        const result = await refreshLibraryArticle({
+          slug,
+          libraryDir: this.options.config.libraryDir,
+          readArticle: (articleUrl) => extractStoryFromUrl(articleUrl),
+        });
+        json(response, result.status === "missing" ? 404 : 200, { ok: result.status !== "missing", ...result });
+        return;
+      }
       if ((decision === "accept" || decision === "skip") && slug) {
         await this.decide(slug, decision);
         json(response, 200, { ok: true, decision, slug });
@@ -138,6 +173,22 @@ export class PirateRadioService {
     }
     json(response, 404, { error: "not_found" });
   }
+}
+
+async function renderArticle(
+  response: ServerResponse,
+  libraryDir: string,
+  pathname: string,
+): Promise<void> {
+  const slug = basename(pathname);
+  const manifest = await readLibraryManifest(libraryDir);
+  const item = manifest.items.find((candidate) => candidate.slug === slug);
+  if (!item) {
+    json(response, 404, { error: "article_not_found" });
+    return;
+  }
+  const story = JSON.parse(await readFile(item.jsonPath, "utf8"));
+  html(response, renderArticleHtml(story, item));
 }
 
 async function streamAudio(
@@ -185,6 +236,34 @@ async function streamAudio(
   createReadStream(audioPath, range ? { start: range.start, end: range.end } : undefined).pipe(
     response,
   );
+}
+
+async function streamLibraryAsset(
+  response: ServerResponse,
+  libraryDir: string,
+  directory: "images" | "alignment",
+  pathname: string,
+  contentType: string,
+): Promise<void> {
+  const filename = basename(pathname);
+  const filePath = resolve(join(libraryDir, directory, filename));
+  const root = resolve(join(libraryDir, directory));
+  if (!filePath.startsWith(root)) {
+    json(response, 400, { error: "bad_asset_path" });
+    return;
+  }
+  try {
+    await access(filePath);
+  } catch {
+    json(response, 404, { error: "asset_not_found" });
+    return;
+  }
+  const size = (await stat(filePath)).size;
+  response.writeHead(200, {
+    "content-type": contentType,
+    "content-length": String(size),
+  });
+  createReadStream(filePath).pipe(response);
 }
 
 export function parseAudioRange(

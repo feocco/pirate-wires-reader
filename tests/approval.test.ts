@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createInitialState, handleArticleDecision } from "../src/workflow.js";
+import { createInitialState, handleArticleDecision, refreshLibraryArticle } from "../src/workflow.js";
 import type { PirateArticle } from "../src/feed.js";
 
 let tempDir: string | undefined;
@@ -112,5 +112,63 @@ describe("approval workflow", () => {
     expect(result.status).toBe("accepted");
     expect(state.skipped[article.id]).toBeUndefined();
     expect(state.approved[article.id]).toBeDefined();
+  });
+
+  test("refresh backfills article metadata without regenerating audio", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "pirate-workflow-"));
+    const libraryDir = tempDir;
+    const audioPath = join(libraryDir, "audio", "inside-microns-attempts.mp3");
+    await mkdir(dirname(audioPath), { recursive: true });
+    await writeFile(audioPath, Buffer.from("mock mp3"));
+    const state = createInitialState();
+    state.approved[article.id] = { article, decidedAt: "2026-06-23T01:00:00.000Z" };
+    await handleArticleDecision({
+      decision: "accept",
+      slug: "inside-microns-attempts",
+      state: { ...state, pending: { "inside-microns-attempts": article }, approved: {} },
+      libraryDir,
+      readArticle: vi.fn(async () => ({
+        sourceUrl: article.url,
+        title: article.title,
+        text: "Body text.",
+        wordCount: 2,
+        characterCount: 10,
+        extractedAt: "2026-06-23T01:00:00.000Z",
+      })),
+      synthesize: vi.fn(async ({ outputPath }) => {
+        await mkdir(dirname(outputPath), { recursive: true });
+        await writeFile(outputPath, Buffer.from("mock mp3"));
+        return { provider: "mock", outputPath, estimatedCostUsd: 0.01 };
+      }),
+    });
+
+    const result = await refreshLibraryArticle({
+      slug: "inside-microns-attempts",
+      libraryDir,
+      readArticle: vi.fn(async () => ({
+        sourceUrl: article.url,
+        title: article.title,
+        tagline: "Updated tagline.",
+        heroImageOriginalUrl: "https://cdn.example.com/hero.png",
+        heroImagePath: join(libraryDir, "images", "inside-microns-attempts.png"),
+        heroImageUrl: "/images/inside-microns-attempts.png",
+        sectionTitles: ["Updated Section"],
+        contentBlocks: [{ type: "heading" as const, text: "Updated Section" }],
+        text: "Updated Section",
+        wordCount: 2,
+        characterCount: 15,
+        extractedAt: "2026-06-23T02:00:00.000Z",
+      })),
+      cacheImage: vi.fn(async () => ({
+        imagePath: join(libraryDir, "images", "inside-microns-attempts.png"),
+        imageUrl: "/images/inside-microns-attempts.png",
+      })),
+    });
+
+    expect(result.status).toBe("refreshed");
+    expect(result.libraryItem).toBeDefined();
+    expect(result.libraryItem!.audioPath).toBe(audioPath);
+    expect(result.libraryItem!.tagline).toBe("Updated tagline.");
+    expect(result.libraryItem!.imageUrl).toBe("/images/inside-microns-attempts.png");
   });
 });

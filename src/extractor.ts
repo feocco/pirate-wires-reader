@@ -1,4 +1,4 @@
-import type { Story } from "./types.js";
+import type { Story, StoryContentBlock, StoryContentBlockType } from "./types.js";
 
 const BLOCKED_TEXT_PATTERNS = [
   /subscribe/i,
@@ -27,25 +27,107 @@ export function extractStoryFromHtml(html: string, sourceUrl: string): Story {
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "");
 
-  const blocks = Array.from(
+  const contentBlocks = Array.from(
     bodyHtml.matchAll(/<(p|h2|h3|li|blockquote)\b[^>]*>([\s\S]*?)<\/\1>/gi),
-    (match) => cleanText(match[2] ?? ""),
-  ).filter((text) => text && !isBlockedText(text));
+    (match): StoryContentBlock | undefined => {
+      const text = cleanText(match[2] ?? "");
+      if (!text || isBlockedText(text)) {
+        return undefined;
+      }
+      return { type: blockType(match[1] ?? "p"), text };
+    },
+  ).filter((block): block is StoryContentBlock => Boolean(block));
 
-  if (blocks.length === 0) {
+  if (contentBlocks.length === 0) {
     throw new Error("Could not find story body text on the page.");
   }
 
-  const text = blocks.join("\n\n");
+  const sectionTitles = contentBlocks
+    .filter((block) => block.type === "heading")
+    .map((block) => block.text);
+  const text = contentBlocks.map((block) => block.text).join("\n\n");
 
   return {
     sourceUrl,
     title,
+    tagline: extractTagline(html),
+    heroImageOriginalUrl: extractHeroImageUrl(html, sourceUrl),
+    sectionTitles,
+    contentBlocks,
     text,
     wordCount: countWords(text),
     characterCount: text.length,
     extractedAt: new Date().toISOString(),
   };
+}
+
+function blockType(tagName: string): StoryContentBlockType {
+  const tag = tagName.toLowerCase();
+  if (tag === "h2" || tag === "h3") {
+    return "heading";
+  }
+  if (tag === "li") {
+    return "list";
+  }
+  if (tag === "blockquote") {
+    return "quote";
+  }
+  return "paragraph";
+}
+
+function extractTagline(html: string): string | undefined {
+  return (
+    extractHeroExcerpt(html) ||
+    cleanText(metaContent(html, "property", "og:description") ?? "") ||
+    cleanText(metaContent(html, "name", "description") ?? "")
+  );
+}
+
+function extractHeroExcerpt(html: string): string | undefined {
+  const match = html.match(
+    /<(?:div|p)\b(?=[^>]*class=["'][^"']*article_excerpt[^"']*["'])[^>]*>([\s\S]*?)<\/(?:div|p)>/i,
+  );
+  return match?.[1] ? cleanText(match[1]) : undefined;
+}
+
+function extractHeroImageUrl(html: string, sourceUrl: string): string | undefined {
+  const coverImageTag = Array.from(html.matchAll(/<img\b[^>]*>/gi), (match) => match[0]).find((tag) =>
+    (attributeValue(tag, "class") ?? "").includes("cover-image"),
+  );
+  const fallback =
+    (coverImageTag ? attributeValue(coverImageTag, "currentSrc") ?? attributeValue(coverImageTag, "src") : undefined) ??
+    metaContent(html, "property", "og:image") ??
+    metaContent(html, "name", "twitter:image");
+  if (!fallback) {
+    return undefined;
+  }
+  const absoluteUrl = new URL(decodeHtml(fallback), sourceUrl).toString();
+  return unwrapNextImageUrl(absoluteUrl);
+}
+
+function metaContent(html: string, attributeName: "name" | "property", expectedValue: string): string | undefined {
+  const tag = Array.from(html.matchAll(/<meta\b[^>]*>/gi), (match) => match[0]).find(
+    (candidate) => attributeValue(candidate, attributeName) === expectedValue,
+  );
+  return tag ? attributeValue(tag, "content") : undefined;
+}
+
+function unwrapNextImageUrl(imageUrl: string): string {
+  try {
+    const url = new URL(imageUrl);
+    const nested = url.searchParams.get("url");
+    if (nested) {
+      return decodeHtml(nested);
+    }
+  } catch {
+    return imageUrl;
+  }
+  return imageUrl;
+}
+
+function attributeValue(tag: string, name: string): string | undefined {
+  const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, "i"));
+  return match?.[2] ?? match?.[3];
 }
 
 export function cleanText(value: string): string {

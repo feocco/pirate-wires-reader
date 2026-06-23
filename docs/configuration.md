@@ -8,11 +8,12 @@ The app reads configuration from environment variables.
 | `SERVICE_HOST` | falls back to `HOST_BIND_ADDR` | In-container/app bind address. Use `0.0.0.0` in Docker. |
 | `HOST_BIND_ADDR` | `127.0.0.1` | HTTP bind address. |
 | `PIRATE_RADIO_PUBLIC_URL` | local service URL | URL placed in notifications. |
-| `PIRATE_RADIO_LIBRARY_DIR` | `output/library` | Durable text, JSON, audio, and manifest root. |
+| `PIRATE_RADIO_LIBRARY_DIR` | `output/library` | Durable text, JSON, audio, cached images, optional alignment, and manifest root. |
 | `PIRATE_RADIO_STATE_PATH` | `<library>/state.json` | Seen/pending/decision state file. |
 | `PIRATE_RADIO_FEED_URL` | Substack RSS feed | Feed to poll. |
 | `PIRATE_RADIO_POLL_INTERVAL_MS` | `900000` | Poll interval. |
 | `PIRATE_RADIO_MAX_NOTIFICATIONS_PER_POLL` | `1` | Notification cap per poll. |
+| `PIRATE_RADIO_ENABLE_ALIGNMENT` | `false` | Set to `true` to run the optional post-TTS Whisper word-timestamp prototype. |
 | `PWR_HEADLESS` | unset | Set to `true` for Docker/headless Playwright. |
 | `OPENAI_API_KEY` | none | Required for approved TTS generation. |
 | `HA_URL` | none | Home Assistant base URL. |

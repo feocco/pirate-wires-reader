@@ -1,7 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { writeAlignment } from "./alignment.js";
+import { cacheStoryImage } from "./assets.js";
 import type { PirateArticle } from "./feed.js";
 import { appendLibraryItem, type LibraryItem } from "./library.js";
+import { readLibraryManifest } from "./library.js";
 import { storySlug } from "./output.js";
 import { createInitialState, type PirateRadioState } from "./state.js";
 import type { TtsProvider, TtsRequest, TtsResult } from "./tts/index.js";
@@ -16,11 +19,24 @@ export interface ArticleDecisionInput {
   libraryDir: string;
   readArticle: (url: string) => Promise<Story>;
   synthesize: (request: TtsRequest) => Promise<TtsResult>;
+  enableAlignment?: boolean;
 }
 
 export interface ArticleDecisionResult {
   status: "accepted" | "skipped" | "missing";
   article?: PirateArticle;
+  libraryItem?: LibraryItem;
+}
+
+export interface RefreshLibraryArticleInput {
+  slug: string;
+  libraryDir: string;
+  readArticle: (url: string) => Promise<Story>;
+  cacheImage?: typeof cacheStoryImage;
+}
+
+export interface RefreshLibraryArticleResult {
+  status: "refreshed" | "missing";
   libraryItem?: LibraryItem;
 }
 
@@ -62,6 +78,11 @@ export async function handleArticleDecision(
   const textPath = join(textDir, `${slug}.txt`);
   const jsonPath = join(storyDir, `${slug}.json`);
   const audioPath = join(audioDir, `${slug}.mp3`);
+  const cachedImage = await tryCacheStoryImage(input.libraryDir, slug, story.heroImageOriginalUrl);
+  if (cachedImage) {
+    story.heroImagePath = cachedImage.imagePath;
+    story.heroImageUrl = cachedImage.imageUrl;
+  }
 
   await writeFile(textPath, `${story.title}\n\n${story.text}\n`, "utf8");
   await writeFile(jsonPath, `${JSON.stringify(story, null, 2)}\n`, "utf8");
@@ -71,6 +92,9 @@ export async function handleArticleDecision(
     outputPath: audioPath,
     allowOverBudget: false,
   });
+  const alignment = input.enableAlignment
+    ? await tryWriteAlignment(input.libraryDir, slug, ttsResult.outputPath)
+    : undefined;
 
   const manifest = await appendLibraryItem(input.libraryDir, {
     slug,
@@ -79,6 +103,13 @@ export async function handleArticleDecision(
     audioPath: ttsResult.outputPath,
     jsonPath,
     textPath,
+    imagePath: story.heroImagePath,
+    imageUrl: story.heroImageUrl,
+    alignmentPath: alignment?.alignmentPath,
+    alignmentUrl: alignment?.alignmentUrl,
+    hasAlignment: Boolean(alignment),
+    tagline: story.tagline,
+    sectionTitles: story.sectionTitles,
     publishedAt: article.publishedAt,
     generatedAt: new Date().toISOString(),
     estimatedCostUsd: ttsResult.estimatedCostUsd,
@@ -94,6 +125,62 @@ export function providerSynthesizer(provider: TtsProvider): ArticleDecisionInput
   return (request) => provider.synthesize(request);
 }
 
+export async function refreshLibraryArticle(
+  input: RefreshLibraryArticleInput,
+): Promise<RefreshLibraryArticleResult> {
+  const manifest = await readLibraryManifest(input.libraryDir);
+  const item = manifest.items.find((candidate) => candidate.slug === input.slug);
+  if (!item) {
+    return { status: "missing" };
+  }
+
+  const story = await input.readArticle(item.sourceUrl);
+  const slug = storySlug(story);
+  const cachedImage = await (input.cacheImage ?? cacheStoryImage)({
+    libraryDir: input.libraryDir,
+    slug,
+    imageUrl: story.heroImageOriginalUrl,
+  });
+  if (cachedImage) {
+    story.heroImagePath = cachedImage.imagePath;
+    story.heroImageUrl = cachedImage.imageUrl;
+  } else {
+    story.heroImagePath = item.imagePath;
+    story.heroImageUrl = item.imageUrl;
+  }
+
+  await mkdir(join(input.libraryDir, "text"), { recursive: true });
+  await mkdir(join(input.libraryDir, "stories"), { recursive: true });
+  await writeFile(item.textPath, `${story.title}\n\n${story.text}\n`, "utf8");
+  await writeFile(item.jsonPath, `${JSON.stringify(story, null, 2)}\n`, "utf8");
+
+  const nextManifest = await appendLibraryItem(input.libraryDir, {
+    slug: item.slug,
+    title: story.title,
+    sourceUrl: story.sourceUrl,
+    audioPath: item.audioPath,
+    jsonPath: item.jsonPath,
+    textPath: item.textPath,
+    imagePath: story.heroImagePath,
+    imageUrl: story.heroImageUrl,
+    alignmentPath: item.alignmentPath,
+    alignmentUrl: item.alignmentUrl,
+    hasAlignment: item.hasAlignment,
+    tagline: story.tagline,
+    sectionTitles: story.sectionTitles,
+    publishedAt: item.publishedAt,
+    generatedAt: item.generatedAt,
+    estimatedCostUsd: item.estimatedCostUsd,
+    wordCount: story.wordCount,
+    characterCount: story.characterCount,
+  });
+
+  return {
+    status: "refreshed",
+    libraryItem: nextManifest.items.find((candidate) => candidate.slug === item.slug),
+  };
+}
+
 function findDecisionRecord(
   records: PirateRadioState["approved"] | PirateRadioState["skipped"],
   slug: string,
@@ -107,4 +194,30 @@ function findSeenArticle(state: PirateRadioState, slug: string): PirateArticle |
 
 function articleSlug(article: PirateArticle): string {
   return article.slug ?? basename(new URL(article.url).pathname);
+}
+
+async function tryCacheStoryImage(
+  libraryDir: string,
+  slug: string,
+  imageUrl?: string,
+): Promise<{ imagePath: string; imageUrl: string } | undefined> {
+  try {
+    return await cacheStoryImage({ libraryDir, slug, imageUrl });
+  } catch (error) {
+    console.warn(`[pirate-radio] image cache failed for ${slug}: ${(error as Error).message}`);
+    return undefined;
+  }
+}
+
+async function tryWriteAlignment(
+  libraryDir: string,
+  slug: string,
+  audioPath: string,
+): Promise<{ alignmentPath: string; alignmentUrl: string } | undefined> {
+  try {
+    return await writeAlignment({ libraryDir, slug, audioPath });
+  } catch (error) {
+    console.warn(`[pirate-radio] alignment failed for ${slug}: ${(error as Error).message}`);
+    return undefined;
+  }
 }

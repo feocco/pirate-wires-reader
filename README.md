@@ -1,7 +1,8 @@
 # Pirate Wires Reader
 
-Local CLI for extracting logged-in Pirate Wires stories and generating OpenAI
-text-to-speech audio.
+Local CLI and Tailnet reader for extracting logged-in Pirate Wires stories,
+generating OpenAI text-to-speech audio, and reading generated articles with
+cached art.
 
 ## Setup
 
@@ -34,8 +35,8 @@ Outputs:
 - `output/text/<slug>.txt`
 - `output/json/<slug>.json`
 
-The extractor is intentionally narrow: it writes the story title and story body
-only.
+The extractor keeps the story focused while preserving reader metadata: title,
+tagline, body blocks, best-effort section titles, and the article hero image URL.
 
 ## Generate Audio
 
@@ -86,6 +87,17 @@ npm start
 
 `serve` polls the Substack RSS feed, sends Home Assistant mobile actions via
 homelab-functions, listens for the mobile action event over Home Assistant
-WebSocket, and writes the reader library manifest under
-`PIRATE_RADIO_LIBRARY_DIR`. Set `PWR_HEADLESS=true` for Docker or any headless
-host.
+WebSocket, and writes the reader library under `PIRATE_RADIO_LIBRARY_DIR`. Set
+`PWR_HEADLESS=true` for Docker or any headless host.
+
+The reader serves:
+
+- `/` for the audio library with cached article art.
+- `/article/<slug>` for a dedicated article page with audio and full text.
+- `/audio/<slug>.mp3`, `/images/<slug>.<ext>`, and optional
+  `/alignment/<slug>.json` assets.
+
+Set `PIRATE_RADIO_ENABLE_ALIGNMENT=true` to prototype word-level highlighting.
+When enabled, the service runs a post-TTS `whisper-1` transcription with word
+timestamps and writes alignment JSON. This is disabled by default because it adds
+cost, latency, and approximate source-text matching.

@@ -11,6 +11,7 @@ export interface PirateRadioConfig {
   homelabFunctionsToken?: string;
   haUrl?: string;
   haLongLivedToken?: string;
+  enableAlignment: boolean;
 }
 
 export function configFromEnv(env: NodeJS.ProcessEnv = process.env): PirateRadioConfig {
@@ -28,5 +29,6 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): PirateRadio
     homelabFunctionsToken: env.HOMELAB_FUNCTIONS_TOKEN,
     haUrl: env.HA_URL,
     haLongLivedToken: env.HA_LONG_LIVED_TOKEN,
+    enableAlignment: env.PIRATE_RADIO_ENABLE_ALIGNMENT === "true",
   };
 }
