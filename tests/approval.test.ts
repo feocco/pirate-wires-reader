@@ -79,4 +79,38 @@ describe("approval workflow", () => {
     expect(result.libraryItem?.audioUrl).toBe("/audio/inside-microns-attempts.mp3");
     expect(state.approved[article.id]).toBeDefined();
   });
+
+  test("accept can recover an article that was already skipped", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "pirate-workflow-"));
+    const state = createInitialState();
+    state.skipped[article.id] = { article, decidedAt: "2026-06-23T01:00:00.000Z" };
+
+    const result = await handleArticleDecision({
+      decision: "accept",
+      slug: "inside-microns-attempts",
+      state,
+      libraryDir: tempDir,
+      readArticle: vi.fn(async () => ({
+        sourceUrl: article.url,
+        title: article.title,
+        text: "Body text.",
+        wordCount: 2,
+        characterCount: 10,
+        extractedAt: "2026-06-23T01:00:00.000Z",
+      })),
+      synthesize: vi.fn(async ({ outputPath }) => {
+        await mkdir(dirname(outputPath), { recursive: true });
+        await writeFile(outputPath, Buffer.from("mock mp3"));
+        return {
+          provider: "mock",
+          outputPath,
+          estimatedCostUsd: 0.01,
+        };
+      }),
+    });
+
+    expect(result.status).toBe("accepted");
+    expect(state.skipped[article.id]).toBeUndefined();
+    expect(state.approved[article.id]).toBeDefined();
+  });
 });

@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { PirateArticle } from "./feed.js";
 import { appendLibraryItem, type LibraryItem } from "./library.js";
 import { storySlug } from "./output.js";
@@ -27,7 +27,15 @@ export interface ArticleDecisionResult {
 export async function handleArticleDecision(
   input: ArticleDecisionInput,
 ): Promise<ArticleDecisionResult> {
-  const article = input.state.pending[input.slug];
+  const existingApproved = findDecisionRecord(input.state.approved, input.slug);
+  if (existingApproved && input.decision === "accept") {
+    return { status: "accepted", article: existingApproved.article };
+  }
+
+  const article =
+    input.state.pending[input.slug] ??
+    findDecisionRecord(input.state.skipped, input.slug)?.article ??
+    findSeenArticle(input.state, input.slug);
   if (!article) {
     return { status: "missing" };
   }
@@ -39,6 +47,8 @@ export async function handleArticleDecision(
     input.state.skipped[article.id] = { article, decidedAt };
     return { status: "skipped", article };
   }
+
+  delete input.state.skipped[article.id];
 
   const story = await input.readArticle(article.url);
   const slug = storySlug(story);
@@ -82,4 +92,19 @@ export async function handleArticleDecision(
 
 export function providerSynthesizer(provider: TtsProvider): ArticleDecisionInput["synthesize"] {
   return (request) => provider.synthesize(request);
+}
+
+function findDecisionRecord(
+  records: PirateRadioState["approved"] | PirateRadioState["skipped"],
+  slug: string,
+): { article: PirateArticle; decidedAt: string } | undefined {
+  return Object.values(records).find((record) => articleSlug(record.article) === slug);
+}
+
+function findSeenArticle(state: PirateRadioState, slug: string): PirateArticle | undefined {
+  return Object.values(state.seen).find((article) => articleSlug(article) === slug);
+}
+
+function articleSlug(article: PirateArticle): string {
+  return article.slug ?? basename(new URL(article.url).pathname);
 }

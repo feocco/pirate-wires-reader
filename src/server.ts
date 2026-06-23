@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { basename, join, resolve } from "node:path";
 import { fetchPirateFeed, detectNewArticles } from "./feed.js";
@@ -120,6 +120,7 @@ export class PirateRadioService {
       url.pathname.startsWith("/audio/")
     ) {
       await streamAudio(
+        request,
         response,
         this.options.config.libraryDir,
         decodeURIComponent(url.pathname),
@@ -140,6 +141,7 @@ export class PirateRadioService {
 }
 
 async function streamAudio(
+  request: IncomingMessage,
   response: ServerResponse,
   libraryDir: string,
   pathname: string,
@@ -158,12 +160,72 @@ async function streamAudio(
     json(response, 404, { error: "audio_not_found" });
     return;
   }
-  response.writeHead(200, { "content-type": "audio/mpeg" });
+  const audioSize = (await stat(audioPath)).size;
+  const range = parseAudioRange(request.headers.range, audioSize);
+  if (range === "invalid") {
+    response.writeHead(416, {
+      "content-range": `bytes */${audioSize}`,
+      "accept-ranges": "bytes",
+    });
+    response.end();
+    return;
+  }
+
+  const headers = {
+    "content-type": "audio/mpeg",
+    "content-length": String(range ? range.end - range.start + 1 : audioSize),
+    "accept-ranges": "bytes",
+    ...(range ? { "content-range": `bytes ${range.start}-${range.end}/${audioSize}` } : {}),
+  };
+  response.writeHead(range ? 206 : 200, headers);
   if (headOnly) {
     response.end();
     return;
   }
-  createReadStream(audioPath).pipe(response);
+  createReadStream(audioPath, range ? { start: range.start, end: range.end } : undefined).pipe(
+    response,
+  );
+}
+
+export function parseAudioRange(
+  rangeHeader: string | undefined,
+  size: number,
+): { start: number; end: number } | "invalid" | undefined {
+  if (!rangeHeader) {
+    return undefined;
+  }
+  const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+  if (!match) {
+    return "invalid";
+  }
+  const [, startValue, endValue] = match;
+  if (!startValue && !endValue) {
+    return "invalid";
+  }
+
+  if (!startValue) {
+    const suffixLength = Number(endValue);
+    if (!Number.isInteger(suffixLength) || suffixLength <= 0) {
+      return "invalid";
+    }
+    return {
+      start: Math.max(size - suffixLength, 0),
+      end: size - 1,
+    };
+  }
+
+  const start = Number(startValue);
+  const end = endValue ? Number(endValue) : size - 1;
+  if (
+    !Number.isInteger(start) ||
+    !Number.isInteger(end) ||
+    start < 0 ||
+    end < start ||
+    start >= size
+  ) {
+    return "invalid";
+  }
+  return { start, end: Math.min(end, size - 1) };
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {
