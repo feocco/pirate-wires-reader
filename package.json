@@ -14,10 +14,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@playwright/test": "^1.56.1",
+    "@playwright/test": "^1.60.0",
     "commander": "^14.0.2",
     "openai": "^6.10.0",
-    "playwright": "^1.56.1"
+    "playwright": "^1.60.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

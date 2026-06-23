@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.56.1-noble AS build
+FROM mcr.microsoft.com/playwright:v1.60.0-noble AS build
 
 WORKDIR /app
 COPY package*.json ./
@@ -8,7 +8,7 @@ COPY src ./src
 COPY tests ./tests
 RUN npm test && npm run build
 
-FROM mcr.microsoft.com/playwright:v1.56.1-noble
+FROM mcr.microsoft.com/playwright:v1.60.0-noble
 
 ENV NODE_ENV=production
 WORKDIR /app
