@@ -21,14 +21,23 @@ export async function extractStoryFromUrl(url: string): Promise<Story> {
     headless: process.env.PWR_HEADLESS === "true",
   });
   const page = context.pages()[0] ?? (await context.newPage());
+  const articleUrl = canonicalPirateWiresUrl(url);
 
   try {
-    await page.goto(url, { waitUntil: "networkidle", timeout: 60_000 });
+    await page.goto(articleUrl, { waitUntil: "networkidle", timeout: 60_000 });
     const html = await page.content();
-    return extractStoryFromHtml(html, url);
+    return extractStoryFromHtml(html, articleUrl);
   } finally {
     await context.close();
   }
+}
+
+export function canonicalPirateWiresUrl(url: string): string {
+  const parsed = new URL(url);
+  if (parsed.hostname === "piratewires.substack.com") {
+    parsed.hostname = "www.piratewires.com";
+  }
+  return parsed.toString();
 }
 
 async function waitForEnter(): Promise<void> {
