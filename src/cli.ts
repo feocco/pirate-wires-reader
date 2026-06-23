@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { Command } from "commander";
+import { openLoginBrowser, extractStoryFromUrl } from "./browser.js";
+import { configFromEnv } from "./config.js";
+import { writeStoryOutputs } from "./output.js";
+import { PirateRadioService } from "./server.js";
+import { looksLikeUrl, readStoryJson } from "./storyFile.js";
+import { createTtsProvider } from "./tts/index.js";
+import type { Story } from "./types.js";
+
+const program = new Command();
+
+program
+  .name("pirate-wires-reader")
+  .description("Extract Pirate Wires stories and generate local TTS audio.")
+  .version("0.1.0");
+
+program
+  .command("login")
+  .description("Open a browser with an isolated profile for Pirate Wires login.")
+  .action(async () => {
+    await openLoginBrowser();
+  });
+
+program
+  .command("extract")
+  .argument("<url>", "Pirate Wires story URL")
+  .description("Extract story title/body and write txt/json outputs.")
+  .action(async (url: string) => {
+    const story = await extractStoryFromUrl(url);
+    const written = await writeStoryOutputs(story);
+    console.log(`Text: ${written.textPath}`);
+    console.log(`JSON: ${written.jsonPath}`);
+  });
+
+program
+  .command("speak")
+  .argument("<json-or-url>", "Story JSON file or Pirate Wires story URL")
+  .option("--provider <provider>", "TTS provider", "openai")
+  .option("--allow-over-budget", "Allow audio generation over the $1 estimate", false)
+  .description("Generate audio from extracted story JSON or from a story URL.")
+  .action(async (input: string, options: { provider: string; allowOverBudget: boolean }) => {
+    const story = await loadStory(input);
+    const audioPath = await storyAudioPath(story);
+    const provider = createTtsProvider(options.provider);
+    const result = await provider.synthesize({
+      title: story.title,
+      text: story.text,
+      outputPath: audioPath,
+      allowOverBudget: options.allowOverBudget,
+    });
+
+    console.log(`Provider: ${result.provider}`);
+    console.log(`Estimated cost: $${result.estimatedCostUsd.toFixed(4)}`);
+    console.log(`Audio: ${result.outputPath}`);
+  });
+
+program
+  .command("read")
+  .argument("<url>", "Pirate Wires story URL")
+  .option("--provider <provider>", "TTS provider", "openai")
+  .option("--allow-over-budget", "Allow audio generation over the $1 estimate", false)
+  .description("Extract a story and generate audio in one command.")
+  .action(async (url: string, options: { provider: string; allowOverBudget: boolean }) => {
+    const story = await extractStoryFromUrl(url);
+    const written = await writeStoryOutputs(story);
+    const audioPath = await storyAudioPath(story);
+    const provider = createTtsProvider(options.provider);
+    const result = await provider.synthesize({
+      title: story.title,
+      text: story.text,
+      outputPath: audioPath,
+      allowOverBudget: options.allowOverBudget,
+    });
+
+    console.log(`Text: ${written.textPath}`);
+    console.log(`JSON: ${written.jsonPath}`);
+    console.log(`Provider: ${result.provider}`);
+    console.log(`Estimated cost: $${result.estimatedCostUsd.toFixed(4)}`);
+    console.log(`Audio: ${result.outputPath}`);
+  });
+
+program
+  .command("serve")
+  .description("Run the deployed Pirate Radio service: monitor, approvals, library, and reader.")
+  .action(async () => {
+    const service = new PirateRadioService({ config: configFromEnv() });
+    await service.start();
+  });
+
+program
+  .command("poll")
+  .description("Run one Pirate Radio RSS monitor poll.")
+  .action(async () => {
+    const service = new PirateRadioService({ config: configFromEnv() });
+    await service.pollOnce();
+  });
+
+program
+  .command("simulate")
+  .argument("<decision>", "accept or skip")
+  .argument("<slug>", "Article slug from pending state")
+  .description("Simulate a Home Assistant mobile action for local validation.")
+  .action(async (decision: "accept" | "skip", slug: string) => {
+    if (decision !== "accept" && decision !== "skip") {
+      throw new Error('Decision must be "accept" or "skip".');
+    }
+    const service = new PirateRadioService({ config: configFromEnv() });
+    await service.decide(slug, decision);
+  });
+
+await program.parseAsync();
+
+async function loadStory(input: string): Promise<Story> {
+  if (looksLikeUrl(input)) {
+    const story = await extractStoryFromUrl(input);
+    await writeStoryOutputs(story);
+    return story;
+  }
+
+  return readStoryJson(input);
+}
+
+async function storyAudioPath(story: Story): Promise<string> {
+  const outputDir = join("output", "audio");
+  await mkdir(outputDir, { recursive: true });
+  const { storySlug } = await import("./output.js");
+  return join(outputDir, `${storySlug(story)}.mp3`);
+}
