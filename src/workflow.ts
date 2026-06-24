@@ -33,6 +33,8 @@ export interface RefreshLibraryArticleInput {
   libraryDir: string;
   readArticle: (url: string) => Promise<Story>;
   cacheImage?: typeof cacheStoryImage;
+  regenerateAudio?: boolean;
+  synthesize?: (request: TtsRequest) => Promise<TtsResult>;
 }
 
 export interface RefreshLibraryArticleResult {
@@ -56,10 +58,10 @@ export async function handleArticleDecision(
     return { status: "missing" };
   }
 
-  delete input.state.pending[input.slug];
   const decidedAt = new Date().toISOString();
 
   if (input.decision === "skip") {
+    delete input.state.pending[input.slug];
     input.state.skipped[article.id] = { article, decidedAt };
     return { status: "skipped", article };
   }
@@ -118,6 +120,7 @@ export async function handleArticleDecision(
   });
 
   input.state.approved[article.id] = { article, decidedAt };
+  delete input.state.pending[input.slug];
   return { status: "accepted", article, libraryItem: manifest.items[0] };
 }
 
@@ -154,11 +157,27 @@ export async function refreshLibraryArticle(
   await writeFile(item.textPath, `${story.title}\n\n${story.text}\n`, "utf8");
   await writeFile(item.jsonPath, `${JSON.stringify(story, null, 2)}\n`, "utf8");
 
+  let audioPath = item.audioPath;
+  let estimatedCostUsd = item.estimatedCostUsd;
+  if (input.regenerateAudio) {
+    if (!input.synthesize) {
+      throw new Error("Cannot regenerate audio without a synthesizer.");
+    }
+    const ttsResult = await input.synthesize({
+      title: story.title,
+      text: story.text,
+      outputPath: item.audioPath,
+      allowOverBudget: false,
+    });
+    audioPath = ttsResult.outputPath;
+    estimatedCostUsd = ttsResult.estimatedCostUsd;
+  }
+
   const nextManifest = await appendLibraryItem(input.libraryDir, {
     slug: item.slug,
     title: story.title,
     sourceUrl: story.sourceUrl,
-    audioPath: item.audioPath,
+    audioPath,
     jsonPath: item.jsonPath,
     textPath: item.textPath,
     imagePath: story.heroImagePath,
@@ -170,7 +189,7 @@ export async function refreshLibraryArticle(
     sectionTitles: story.sectionTitles,
     publishedAt: item.publishedAt,
     generatedAt: item.generatedAt,
-    estimatedCostUsd: item.estimatedCostUsd,
+    estimatedCostUsd,
     wordCount: story.wordCount,
     characterCount: story.characterCount,
   });

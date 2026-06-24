@@ -8,7 +8,14 @@ import { extractStoryFromUrl } from "./browser.js";
 import type { PirateRadioConfig } from "./config.js";
 import { HomeAssistantActionListener } from "./haActions.js";
 import { readLibraryManifest } from "./library.js";
-import { buildArticleNotification, type PirateRadioDecision } from "./notifications.js";
+import {
+  buildArticleFailureNotification,
+  buildArticleNotification,
+  buildArticleReadyNotification,
+  failureType,
+  type ArticleNotification,
+  type PirateRadioDecision,
+} from "./notifications.js";
 import { HomelabFunctionsNotifier, type Notifier } from "./notifier.js";
 import { renderArticleHtml, renderReaderHtml } from "./reader.js";
 import { readState, seenArticleIds, writeState, type PirateRadioState } from "./state.js";
@@ -25,6 +32,7 @@ export class PirateRadioService {
   private pollTimer?: NodeJS.Timeout;
   private readonly notifier: Notifier;
   private readonly actionListener: HomeAssistantActionListener;
+  private readonly failureNotifications = new Set<string>();
 
   constructor(private readonly options: PirateRadioServiceOptions) {
     this.notifier =
@@ -85,17 +93,28 @@ export class PirateRadioService {
   async decide(slug: string, decision: PirateRadioDecision): Promise<void> {
     const state = await this.getState();
     const provider = createTtsProvider("openai");
-    const result = await handleArticleDecision({
-      decision,
-      slug,
-      state,
-      libraryDir: this.options.config.libraryDir,
-      readArticle: (url) => extractStoryFromUrl(url),
-      synthesize: providerSynthesizer(provider),
-      enableAlignment: this.options.config.enableAlignment,
-    });
-    await writeState(this.options.config.statePath, state);
-    console.log(`[pirate-radio] decision ${decision} for ${slug}: ${result.status}`);
+    try {
+      const result = await handleArticleDecision({
+        decision,
+        slug,
+        state,
+        libraryDir: this.options.config.libraryDir,
+        readArticle: (url) => extractStoryFromUrl(url),
+        synthesize: providerSynthesizer(provider),
+        enableAlignment: this.options.config.enableAlignment,
+      });
+      await writeState(this.options.config.statePath, state);
+      if (decision === "accept" && result.libraryItem) {
+        await this.sendNotification(
+          buildArticleReadyNotification(result.libraryItem, this.options.config.publicBaseUrl),
+        );
+      }
+      console.log(`[pirate-radio] decision ${decision} for ${slug}: ${result.status}`);
+    } catch (error) {
+      await writeState(this.options.config.statePath, state);
+      await this.notifyArticleFailure(slug, error);
+      console.error(`[pirate-radio] decision ${decision} for ${slug} failed`, error);
+    }
   }
 
   private async getState(): Promise<PirateRadioState> {
@@ -157,11 +176,21 @@ export class PirateRadioService {
     if (request.method === "POST" && url.pathname.startsWith("/simulate/")) {
       const [, , decision, slug] = url.pathname.split("/");
       if (decision === "refresh" && slug) {
+        const regenerateAudio = url.searchParams.get("regenerateAudio") === "true";
+        const notify = url.searchParams.get("notify") === "true";
+        const provider = regenerateAudio ? createTtsProvider("openai") : undefined;
         const result = await refreshLibraryArticle({
           slug,
           libraryDir: this.options.config.libraryDir,
           readArticle: (articleUrl) => extractStoryFromUrl(articleUrl),
+          regenerateAudio,
+          synthesize: provider ? providerSynthesizer(provider) : undefined,
         });
+        if (notify && result.libraryItem) {
+          await this.sendNotification(
+            buildArticleReadyNotification(result.libraryItem, this.options.config.publicBaseUrl),
+          );
+        }
         json(response, result.status === "missing" ? 404 : 200, { ok: result.status !== "missing", ...result });
         return;
       }
@@ -173,6 +202,40 @@ export class PirateRadioService {
     }
     json(response, 404, { error: "not_found" });
   }
+
+  private async notifyArticleFailure(slug: string, error: unknown): Promise<void> {
+    const state = await this.getState();
+    const article = findArticleBySlug(state, slug);
+    if (!article) {
+      return;
+    }
+    const key = `${slug}:${failureType(error)}`;
+    if (this.failureNotifications.has(key)) {
+      return;
+    }
+    this.failureNotifications.add(key);
+    await this.sendNotification(
+      buildArticleFailureNotification(article, error, this.options.config.publicBaseUrl),
+    );
+  }
+
+  private async sendNotification(notification: ArticleNotification): Promise<void> {
+    try {
+      await this.notifier.send(notification);
+    } catch (error) {
+      console.error("[pirate-radio] notification failed", error);
+    }
+  }
+}
+
+function findArticleBySlug(state: PirateRadioState, slug: string) {
+  const articles = [
+    ...Object.values(state.pending),
+    ...Object.values(state.seen),
+    ...Object.values(state.approved).map((record) => record.article),
+    ...Object.values(state.skipped).map((record) => record.article),
+  ];
+  return articles.find((article) => (article.slug ?? basename(new URL(article.url).pathname)) === slug);
 }
 
 async function renderArticle(

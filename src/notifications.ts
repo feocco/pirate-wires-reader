@@ -1,4 +1,5 @@
 import type { PirateArticle } from "./feed.js";
+import type { LibraryItem } from "./library.js";
 import { slugFromUrl } from "./slug.js";
 
 export type PirateRadioDecision = "accept" | "skip";
@@ -50,6 +51,36 @@ export function buildArticleNotification(
   };
 }
 
+export function buildArticleReadyNotification(
+  item: Pick<LibraryItem, "slug" | "title">,
+  readerBaseUrl: string,
+): ArticleNotification {
+  return {
+    title: "Pirate Radio Ready",
+    message: `${item.title} is ready to listen.`,
+    tag: `pirate-radio-ready-${item.slug}`,
+    group: "pirate-radio",
+    url: new URL(`/article/${encodeURIComponent(item.slug)}`, readerBaseUrl).toString(),
+    buttons: [],
+  };
+}
+
+export function buildArticleFailureNotification(
+  article: PirateArticle,
+  error: unknown,
+  readerBaseUrl?: string,
+): ArticleNotification {
+  const slug = article.slug ?? slugFromUrl(article.url);
+  return {
+    title: "Pirate Radio Failed",
+    message: `${article.title} failed: ${failureMessage(error)}`,
+    tag: `pirate-radio-failed-${slug}`,
+    group: "pirate-radio",
+    url: readerBaseUrl,
+    buttons: [],
+  };
+}
+
 export function parsePirateRadioAction(action: string): ParsedPirateRadioAction | null {
   if (action.startsWith(ACCEPT_PREFIX)) {
     return { decision: "accept", slug: action.slice(ACCEPT_PREFIX.length) };
@@ -58,4 +89,15 @@ export function parsePirateRadioAction(action: string): ParsedPirateRadioAction 
     return { decision: "skip", slug: action.slice(SKIP_PREFIX.length) };
   }
   return null;
+}
+
+export function failureType(error: unknown): string {
+  return error instanceof Error ? error.name : "Error";
+}
+
+function failureMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
 }

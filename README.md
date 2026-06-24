@@ -90,6 +90,12 @@ homelab-functions, listens for the mobile action event over Home Assistant
 WebSocket, and writes the reader library under `PIRATE_RADIO_LIBRARY_DIR`. Set
 `PWR_HEADLESS=true` for Docker or any headless host.
 
+When an article is approved, the service now fails closed if the Playwright
+profile is not logged into Pirate Wires, sends a failure notification with the
+active profile path, and leaves the article pending so it can be retried. After
+successful audio generation, it sends a ready notification that opens the
+article page directly.
+
 The reader serves:
 
 - `/` for the audio library with cached article art.
@@ -101,3 +107,10 @@ Set `PIRATE_RADIO_ENABLE_ALIGNMENT=true` to prototype word-level highlighting.
 When enabled, the service runs a post-TTS `whisper-1` transcription with word
 timestamps and writes alignment JSON. This is disabled by default because it adds
 cost, latency, and approximate source-text matching.
+
+For manual backfills after relogin, refresh and regenerate an existing library
+item with:
+
+```bash
+curl -X POST "http://127.0.0.1:8123/simulate/refresh/<slug>?regenerateAudio=true&notify=true"
+```

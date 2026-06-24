@@ -15,12 +15,17 @@ Pirate Radio is a local-first reader pipeline for Pirate Wires articles.
 6. Cache article art locally, synthesize MP3 audio through the selected TTS
    provider, and optionally write word-timing alignment JSON.
 7. Write story JSON, text, MP3, cached image, and a library manifest.
-8. Serve a Tailnet-only reader UI with a library view, article detail pages,
+8. Send a ready notification with a direct link to the generated article page.
+9. Serve a Tailnet-only reader UI with a library view, article detail pages,
    cached images, inline MP3 streaming, and saved playback position.
 
 The first service run treats the current feed as a baseline and queues at most
 one notification, which avoids a startup flood. Later polls only mark articles
 seen when they are queued or decided.
+
+Extraction fails closed when the persistent Playwright profile is not logged
+into Pirate Wires. The service sends a failure notification, keeps the article
+pending for retry, and avoids generating preview-length audio.
 
 ## Components
 

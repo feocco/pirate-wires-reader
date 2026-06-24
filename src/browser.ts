@@ -3,6 +3,14 @@ import { extractStoryFromHtml } from "./extractor.js";
 import type { Story } from "./types.js";
 
 export const PROFILE_DIR = ".playwright-profile";
+const LOGGED_IN_TEXT = "My Account";
+
+export class PirateWiresAuthRequiredError extends Error {
+  constructor(profileDir: string) {
+    super(`Pirate Wires login required for ${profileDir}`);
+    this.name = "PirateWiresAuthRequiredError";
+  }
+}
 
 export async function openLoginBrowser(): Promise<void> {
   const profileDir = profileDirFromEnv();
@@ -27,7 +35,14 @@ export async function extractStoryFromUrl(url: string): Promise<Story> {
   try {
     await page.goto(articleUrl, { waitUntil: "networkidle", timeout: 60_000 });
     const html = await page.content();
-    return extractStoryFromHtml(html, articleUrl);
+    const story = extractStoryFromHtml(html, articleUrl);
+    const pageText = await page.locator("body").textContent();
+    validatePirateWiresAccess({
+      pageText: pageText ?? "",
+      articleWordCount: story.wordCount,
+      profileDir: profileDirFromEnv(),
+    });
+    return story;
   } finally {
     await context.close();
   }
@@ -45,6 +60,19 @@ export function profileDirFromEnv(
   env: Partial<Pick<NodeJS.ProcessEnv, "PWR_PROFILE_DIR">> = process.env,
 ): string {
   return env.PWR_PROFILE_DIR || PROFILE_DIR;
+}
+
+export function validatePirateWiresAccess(input: {
+  pageText: string;
+  articleWordCount: number;
+  profileDir: string;
+}): void {
+  if (!input.pageText.includes(LOGGED_IN_TEXT)) {
+    throw new PirateWiresAuthRequiredError(input.profileDir);
+  }
+  if (input.articleWordCount === 0) {
+    throw new Error("Pirate Wires article loaded without readable story text.");
+  }
 }
 
 async function waitForEnter(): Promise<void> {

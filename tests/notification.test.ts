@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { buildArticleNotification, parsePirateRadioAction } from "../src/notifications.js";
+import {
+  buildArticleFailureNotification,
+  buildArticleNotification,
+  buildArticleReadyNotification,
+  parsePirateRadioAction,
+} from "../src/notifications.js";
 
 describe("Pirate Radio notifications", () => {
   const article = {
@@ -38,5 +43,34 @@ describe("Pirate Radio notifications", () => {
       slug: "inside-microns-attempts",
     });
     expect(parsePirateRadioAction("OTHER_ACTION")).toBeNull();
+  });
+
+  test("builds a ready notification with a direct article URL", () => {
+    const notification = buildArticleReadyNotification(
+      {
+        slug: "inside-microns-attempts",
+        title: "Inside Micron's Attempts",
+      },
+      "https://pirate-radio.example.test/",
+    );
+
+    expect(notification.title).toBe("Pirate Radio Ready");
+    expect(notification.message).toContain("Inside Micron's Attempts");
+    expect(notification.url).toBe("https://pirate-radio.example.test/article/inside-microns-attempts");
+    expect(notification.buttons).toEqual([]);
+  });
+
+  test("builds an actionable failure notification", () => {
+    const notification = buildArticleFailureNotification(
+      article,
+      new Error("Pirate Wires login required for /data/playwright-profile"),
+      "https://pirate-radio.example.test/",
+    );
+
+    expect(notification.title).toBe("Pirate Radio Failed");
+    expect(notification.message).toContain("Inside Micron's Attempts");
+    expect(notification.message).toContain("login required");
+    expect(notification.url).toBe("https://pirate-radio.example.test/");
+    expect(notification.buttons).toEqual([]);
   });
 });

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { canonicalPirateWiresUrl, profileDirFromEnv } from "../src/browser.js";
+import {
+  PirateWiresAuthRequiredError,
+  canonicalPirateWiresUrl,
+  profileDirFromEnv,
+  validatePirateWiresAccess,
+} from "../src/browser.js";
 
 describe("browser extraction URLs", () => {
   test("normalizes Substack feed URLs to Pirate Wires article pages", () => {
@@ -19,5 +24,25 @@ describe("browser extraction URLs", () => {
       "/data/playwright-profile",
     );
     expect(profileDirFromEnv({})).toBe(".playwright-profile");
+  });
+
+  test("rejects public preview pages before returning truncated article text", () => {
+    expect(() =>
+      validatePirateWiresAccess({
+        pageText: "Pirate Wires Technology Gift a Sub",
+        articleWordCount: 362,
+        profileDir: "/data/playwright-profile",
+      }),
+    ).toThrow(PirateWiresAuthRequiredError);
+  });
+
+  test("accepts logged-in pages with full article access", () => {
+    expect(() =>
+      validatePirateWiresAccess({
+        pageText: "Pirate Wires Technology My Account",
+        articleWordCount: 2017,
+        profileDir: "/data/playwright-profile",
+      }),
+    ).not.toThrow();
   });
 });

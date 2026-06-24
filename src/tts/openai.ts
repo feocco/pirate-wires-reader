@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import { assertWithinBudget } from "./cost.js";
 import type { TtsProvider, TtsRequest, TtsResult } from "./types.js";
 
-const DEFAULT_MAX_SPEECH_CHARS = 5000;
+const DEFAULT_MAX_SPEECH_CHARS = 3900;
 
 export interface OpenAiTtsProviderOptions {
   apiKey?: string;

@@ -52,4 +52,15 @@ describe("splitSpeechInput", () => {
     expect(chunks.join("\n\n")).toContain("A Long Story");
     expect(chunks.join("\n\n")).toContain("Paragraph 11");
   });
+
+  test("default chunks stay below OpenAI speech input max length", () => {
+    const text = Array.from({ length: 10 }, (_, index) => `Paragraph ${index} ${"word ".repeat(170)}`).join(
+      "\n\n",
+    );
+
+    const chunks = splitSpeechInput("A Long Story", text);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.length <= 4096)).toBe(true);
+  });
 });
