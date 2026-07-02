@@ -69,8 +69,25 @@ export function buildArticleFailureNotification(
   article: PirateArticle,
   error: unknown,
   readerBaseUrl?: string,
+  reauthUrl?: string,
 ): ArticleNotification {
   const slug = article.slug ?? slugFromUrl(article.url);
+  if (isAuthRequiredError(error) && reauthUrl) {
+    return {
+      title: "Pirate Radio Login Required",
+      message: `${article.title} needs a fresh Pirate Wires login before audio can be generated.`,
+      tag: `pirate-radio-login-${slug}`,
+      group: "pirate-radio",
+      url: reauthUrl,
+      buttons: [
+        {
+          title: "Open Login",
+          action: "URI",
+          uri: reauthUrl,
+        },
+      ],
+    };
+  }
   return {
     title: "Pirate Radio Failed",
     message: `${article.title} failed: ${failureMessage(error)}`,
@@ -100,4 +117,8 @@ function failureMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function isAuthRequiredError(error: unknown): boolean {
+  return error instanceof Error && error.name === "PirateWiresAuthRequiredError";
 }

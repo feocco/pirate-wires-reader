@@ -25,7 +25,9 @@ seen when they are queued or decided.
 
 Extraction fails closed when the persistent Playwright profile is not logged
 into Pirate Wires. The service sends a failure notification, keeps the article
-pending for retry, and avoids generating preview-length audio.
+pending for retry, and avoids generating preview-length audio. When
+`PIRATE_RADIO_REAUTH_URL` is configured, auth failures send a dedicated
+login-required notification that opens the Tailnet-only reauth browser.
 
 ## Components
 

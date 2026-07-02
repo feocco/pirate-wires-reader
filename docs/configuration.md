@@ -21,6 +21,7 @@ The app reads configuration from environment variables.
 | `HA_LONG_LIVED_TOKEN` | none | Home Assistant WebSocket token. |
 | `HOMELAB_FUNCTIONS_URL` | none | Notification broker URL. |
 | `HOMELAB_FUNCTIONS_TOKEN` | none | Notification broker bearer token. |
+| `PIRATE_RADIO_REAUTH_URL` | none | Tailnet-only login browser URL used in auth-required notifications. |
 
 Deployment-specific Compose, Tailnet exposure, monitoring, and real secrets
 belong in the private `homelab-config` repo.

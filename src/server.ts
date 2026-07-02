@@ -215,7 +215,12 @@ export class PirateRadioService {
     }
     this.failureNotifications.add(key);
     await this.sendNotification(
-      buildArticleFailureNotification(article, error, this.options.config.publicBaseUrl),
+      buildArticleFailureNotification(
+        article,
+        error,
+        this.options.config.publicBaseUrl,
+        this.options.config.reauthUrl,
+      ),
     );
   }
 

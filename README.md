@@ -96,6 +96,11 @@ active profile path, and leaves the article pending so it can be retried. After
 successful audio generation, it sends a ready notification that opens the
 article page directly.
 
+Set `PIRATE_RADIO_REAUTH_URL` to the Tailnet-only login browser URL when a
+reauth browser is available. Auth failures then send a dedicated login-required
+notification whose tap target opens that browser, so the article can be retried
+after login.
+
 The reader serves:
 
 - `/` for the audio library with cached article art.

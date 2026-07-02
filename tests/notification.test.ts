@@ -5,6 +5,7 @@ import {
   buildArticleReadyNotification,
   parsePirateRadioAction,
 } from "../src/notifications.js";
+import { PirateWiresAuthRequiredError } from "../src/browser.js";
 
 describe("Pirate Radio notifications", () => {
   const article = {
@@ -72,5 +73,25 @@ describe("Pirate Radio notifications", () => {
     expect(notification.message).toContain("login required");
     expect(notification.url).toBe("https://pirate-radio.example.test/");
     expect(notification.buttons).toEqual([]);
+  });
+
+  test("builds a direct login notification for auth failures when reauth URL is configured", () => {
+    const notification = buildArticleFailureNotification(
+      article,
+      new PirateWiresAuthRequiredError("/data/playwright-profile"),
+      "https://pirate-radio.example.test/",
+      "http://maclabs-mac-mini.taildf3445.ts.net:5801/",
+    );
+
+    expect(notification.title).toBe("Pirate Radio Login Required");
+    expect(notification.message).toContain("fresh Pirate Wires login");
+    expect(notification.url).toBe("http://maclabs-mac-mini.taildf3445.ts.net:5801/");
+    expect(notification.buttons).toEqual([
+      {
+        title: "Open Login",
+        action: "URI",
+        uri: "http://maclabs-mac-mini.taildf3445.ts.net:5801/",
+      },
+    ]);
   });
 });
